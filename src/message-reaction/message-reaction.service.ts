@@ -1,15 +1,22 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, UseInterceptors } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { Context, ContextOf, On, Once, Options, SlashCommand, SlashCommandContext } from "necord";
 import { Prisma } from "@prisma/client";
 import { AddStimulusCommandDto } from "./dto/add-stimulus.command.dto";
 import { MessageReaction_StimulusWithReactions } from "./types/stimulus.type";
+import { throwError } from "../utils/interactions.utils";
+import { MessageReactionInterceptor } from "./interceptors/message-reaction.interceptor";
+import { RemoveStimulusCommandDto } from "./dto/remove-stimulus.command.dto";
+import { AddReactionsCommandDto } from "./dto/add-reactions.command.dto";
+import { APIEmbedField, EmbedBuilder } from "discord.js";
+import { ToggleKeywordCommandDto } from "./dto/toggle-keyword.command.dto";
+import { arrayChoose } from "../utils/array.utils";
+import { RemoveReactionCommandDto } from "./dto/remove-reaction.command.dto";
 
 @Injectable()
 export class MessageReactionService {
-  private readonly logger = new Logger(MessageReactionService.name);
-
   public stimuli: Array<MessageReaction_StimulusWithReactions>;
+  private readonly logger = new Logger(MessageReactionService.name);
 
   constructor(private readonly dbService: PrismaService) {
   }
@@ -65,15 +72,157 @@ export class MessageReactionService {
 
       await interaction.reply(`Stimulus added: ${stimulus.message}`);
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-        await interaction.reply("Stimulus already exists");
-      }
-      await interaction.reply("Failed to add stimulus");
       this.logger.debug(`Failed to add stimulus: ${e.message}`);
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        await throwError("Stimulus already exists", interaction);
+        return;
+      }
+      await throwError("Failed to add stimulus", interaction);
     }
   }
-}
 
-function arrayChoose<T>(array: Array<T>): T {
-  return array[Math.floor(Math.random() * array.length)];
+  @SlashCommand({
+    name: "list-stimuli",
+    description: "List all stimuli in the bot",
+  })
+  public async listStimuli(@Context() [interaction]: SlashCommandContext) {
+    try {
+      const stimuliField: APIEmbedField[] = this.stimuli.map((stimulus, index) => ({
+        name: `${stimulus.message} ${stimulus.keyword ? "(🔤)" : ""}`,
+        value: stimulus.reactions.map(reaction => reaction.message).join("\n"),
+        inline: index % 3 !== 2,
+      }));
+      const embed = new EmbedBuilder().setTitle("Stimuli List");
+      if (stimuliField.length === 0) {
+        embed.setDescription("No stimuli found");
+      } else {
+        embed.addFields(stimuliField);
+      }
+
+      return interaction.reply({embeds: [embed]});
+    } catch (e) {
+      this.logger.debug(`Failed to list stimuli: ${e.message}`);
+      await throwError("Failed to list stimuli", interaction);
+    }
+  }
+
+  @UseInterceptors(MessageReactionInterceptor)
+  @SlashCommand({
+    name: "add-reactions",
+    description: "Add reactions to a stimulus",
+    defaultMemberPermissions: ["ManageGuild"],
+  })
+  public async addReactions(@Context() [interaction]: SlashCommandContext, @Options() options: AddReactionsCommandDto) {
+    const stimulus = this.stimuli.find(s => s.message === options.message);
+    if (!stimulus) {
+      await throwError("Stimulus not found", interaction);
+      return;
+    }
+
+    try {
+      const reaction = await this.dbService.messageReaction_Response.create({
+        data: {
+          message: options.reactions,
+          stimulus: {connect: {message: stimulus.message}},
+        },
+      });
+      this.logger.debug(`Added reaction(s): ${reaction.message} to stimulus: ${stimulus.message}`);
+
+      // Update by reference
+      // TODO: Explicitly update the stimulus instead of relying on the reference
+      stimulus.reactions.push(reaction);
+
+      await interaction.reply(`Reaction(s) added: ${reaction.message} to stimulus: ${stimulus.message}`);
+    } catch (e) {
+      this.logger.debug(`Failed to add reaction(s): ${e.message}`);
+      await throwError("Failed to add reaction(s)", interaction);
+    }
+  }
+
+  @UseInterceptors(MessageReactionInterceptor)
+  @SlashCommand({
+    name: "remove-reaction",
+    description: "Remove a reaction from a stimulus",
+    defaultMemberPermissions: ["ManageGuild"],
+  })
+  public async removeReaction(@Context() [interaction]: SlashCommandContext, @Options() options: RemoveReactionCommandDto) {
+    const stimulus = this.stimuli.find(s => s.message === options.message);
+    if (!stimulus) {
+      await throwError("Stimulus not found", interaction);
+      return;
+    }
+
+    const reaction = stimulus.reactions[options.reaction];
+    if (!reaction) {
+      await throwError("Reaction not found", interaction);
+      return;
+    }
+
+    try {
+      await this.dbService.messageReaction_Response.delete({where: {id: reaction.id}});
+      this.logger.debug(`Removed reaction: ${reaction.message} from stimulus: ${stimulus.message}`);
+
+      stimulus.reactions = stimulus.reactions.filter(r => r.id !== reaction.id);
+
+      await interaction.reply(`Reaction removed: ${reaction.message} from stimulus: ${stimulus.message}`);
+    } catch (e) {
+      this.logger.debug(`Failed to remove reaction: ${e.message}`);
+      await throwError("Failed to remove reaction", interaction);
+    }
+  }
+
+  @UseInterceptors(MessageReactionInterceptor)
+  @SlashCommand({
+    name: "toggle-keyword",
+    description: "Toggle a stimulus as a keyword",
+    defaultMemberPermissions: ["ManageGuild"],
+  })
+  public async toggleKeyword(@Context() [interaction]: SlashCommandContext, @Options() options: ToggleKeywordCommandDto) {
+    const stimulus = this.stimuli.find(s => s.message === options.message);
+    if (!stimulus) {
+      await throwError("Stimulus not found", interaction);
+      return;
+    }
+
+    const keywordStr = stimulus.keyword ? "not keyword" : "keyword";
+
+    try {
+      const updatedStimulus = await this.dbService.messageReaction_Stimulus.update({
+        where: {message: stimulus.message},
+        data: {keyword: !stimulus.keyword},
+        include: {reactions: true},
+      });
+      this.logger.debug(`Toggled stimulus as ${keywordStr}: ${updatedStimulus.message}`);
+
+      stimulus.keyword = updatedStimulus.keyword;
+
+      await interaction.reply(`Stimulus toggled as ${keywordStr}: ${updatedStimulus.message}`);
+    } catch (e) {
+      this.logger.debug(`Failed to toggle stimulus as ${keywordStr}: ${e.message}`);
+      await throwError("Failed to toggle stimulus as ${keywordStr}", interaction);
+    }
+  }
+
+  @UseInterceptors(MessageReactionInterceptor)
+  @SlashCommand({
+    name: "remove-stimulus",
+    description: "Remove a stimulus from the bot",
+    defaultMemberPermissions: ["ManageGuild"],
+  })
+  public async removeStimulus(@Context() [interaction]: SlashCommandContext, @Options() options: RemoveStimulusCommandDto) {
+    try {
+      const stimulus = await this.dbService.messageReaction_Stimulus.delete({
+        where: {message: options.message},
+        include: {reactions: true},
+      });
+      this.logger.debug(`Removed stimulus: ${stimulus.message}`);
+
+      this.stimuli = this.stimuli.filter(s => s.message !== stimulus.message);
+
+      await interaction.reply(`Stimulus removed: ${stimulus.message}`);
+    } catch (e) {
+      this.logger.debug(`Failed to remove stimulus: ${e.message}`);
+      await throwError("Failed to remove stimulus", interaction);
+    }
+  }
 }
