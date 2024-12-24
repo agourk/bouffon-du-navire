@@ -12,6 +12,7 @@ import { APIEmbedField, EmbedBuilder } from "discord.js";
 import { ToggleKeywordCommandDto } from "./dto/toggle-keyword.command.dto";
 import { arrayChoose } from "../utils/array.utils";
 import { RemoveReactionCommandDto } from "./dto/remove-reaction.command.dto";
+import { PlaceholdersLib } from "./libs/placeholders.lib";
 
 @Injectable()
 export class MessageReactionService {
@@ -46,9 +47,16 @@ export class MessageReactionService {
     });
     if (!stimulus) return;
 
-    await message.reply(arrayChoose(stimulus.reactions).message);
+    const answer = arrayChoose(stimulus.reactions).message;
+    const placeholdersReplacements = new Map([
+      ["USER", message.author.username],
+      ["DISPLAY_NAME", message.author.displayName],
+      ["MENTION", message.author.toString()],
+    ]);
+    await message.reply(PlaceholdersLib.parsePlaceholders(answer, placeholdersReplacements));
   }
 
+  // ==== Commands ====
   @SlashCommand({
     name: "add-stimulus",
     description: "Add a stimulus to the bot",
