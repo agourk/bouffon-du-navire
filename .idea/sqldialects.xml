@@ -3,5 +3,6 @@
   <component name="SqlDialectMappings">
     <file url="file://$PROJECT_DIR$/prisma/migrations/20241223215547_init/migration.sql" dialect="SQLite" />
     <file url="file://$PROJECT_DIR$/prisma/migrations/20241224022011_unique_messages/migration.sql" dialect="SQLite" />
+    <file url="file://$PROJECT_DIR$/prisma/migrations/20241226142049_message_reaction_ref_cascade/migration.sql" dialect="SQLite" />
   </component>
 </project>

@@ -25,6 +25,6 @@ model MessageReaction_Response {
   createdAt  DateTime                 @default(now())
   updatedAt  DateTime                 @updatedAt
   message    String
-  stimulus   MessageReaction_Stimulus @relation(fields: [stimulusId], references: [id])
+  stimulus   MessageReaction_Stimulus @relation(fields: [stimulusId], references: [id], onDelete: Cascade)
   stimulusId String
 }

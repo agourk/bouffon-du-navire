@@ -8,6 +8,10 @@
   ],
   "private": true,
   "license": "MIT",
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -18,6 +22,8 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "ts-node -r tsconfig-paths/register ./prisma/seed/seed.ts"
   },
