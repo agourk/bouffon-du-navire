@@ -27,7 +27,7 @@ import { MessageReactionModule } from "./message-reaction/message-reaction.modul
           IntentsBitField.Flags.MessageContent,
           IntentsBitField.Flags.GuildMembers,
         ],
-        development: configService.get("DISCORD_DEVELOPMENT_GUILD_ID"),
+        development: configService.get("DISCORD_DEVELOPMENT_GUILD_ID") ?? undefined,
       }),
     }),
     MessageReactionModule],
