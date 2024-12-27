@@ -37,6 +37,7 @@ export class MessageReactionService {
 
     // Check if one of the stimuli is in the message
     // If the stimuli is marked as not a keyword, check if the message only contains the stimulus
+    // TODO: Case insensitive comparison
     const stimulus = this.stimuli.find(stimulus => {
       const content = message.content.toLowerCase();
       const stickers = message.stickers;
@@ -46,13 +47,16 @@ export class MessageReactionService {
         if (stimulus.stickers && stickers.size > 0) {
           return stickers.some(sticker => sticker.name.includes(stimulus.message));
         }
-        console.log(content.split(/[\s\\.!?:]/));
-        return content.split(/[\s\\.!?:]/).includes(stimulus.message);
+
+        const contentWords = content.split(/\W+/g);
+        return contentWords.includes(stimulus.message) ||
+          contentWords.some((_, index) => contentWords.slice(index, index + stimulus.message.length).join("") === stimulus.message);
       } else {
         if (stimulus.stickers && stickers.size > 0) {
           return stickers.some(sticker => sticker.name == stimulus.message);
         }
-        return content === stimulus.message;
+        return content === stimulus.message
+        // || content.replace(/\W+/g, "") === stimulus.message;
       }
     });
     if (!stimulus) return;
