@@ -14,5 +14,5 @@ async function bootstrap() {
 }
 
 bootstrap().then(() => {
-  logger.log(`Server started on port ${PORT}`);
+  logger.log(`Bot started`);
 });

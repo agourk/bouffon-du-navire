@@ -9,7 +9,7 @@ import { MessageReactionInterceptor } from "./interceptors/message-reaction.inte
 import { RemoveStimulusCommandDto } from "./dto/remove-stimulus.command.dto";
 import { AddReactionsCommandDto } from "./dto/add-reactions.command.dto";
 import { APIEmbedField, EmbedBuilder } from "discord.js";
-import { ToggleKeywordCommandDto } from "./dto/toggle-keyword.command.dto";
+import { UpdateStimulusCommandDto } from "./dto/update-stimulus.command.dto";
 import { arrayChoose } from "../utils/array.utils";
 import { RemoveReactionCommandDto } from "./dto/remove-reaction.command.dto";
 import { PlaceholdersLib } from "./libs/placeholders.lib";
@@ -40,14 +40,16 @@ export class MessageReactionService {
     const stimulus = this.stimuli.find(stimulus => {
       const content = message.content.toLowerCase();
       const stickers = message.stickers;
+
       if (stimulus.keyword) {
         // If the message contains stickers, and the stimulus allows stickers triggers, check if the sticker name contains the stimulus message
-        if (stimulus.stickers && stickers) {
+        if (stimulus.stickers && stickers.size > 0) {
           return stickers.some(sticker => sticker.name.includes(stimulus.message));
         }
-        return content.split(/[\s\\.!?]/).includes(stimulus.message);
+        console.log(content.split(/[\s\\.!?:]/));
+        return content.split(/[\s\\.!?:]/).includes(stimulus.message);
       } else {
-        if (stimulus.stickers && stickers) {
+        if (stimulus.stickers && stickers.size > 0) {
           return stickers.some(sticker => sticker.name == stimulus.message);
         }
         return content === stimulus.message;
@@ -106,7 +108,7 @@ export class MessageReactionService {
     try {
       const stimuliField: APIEmbedField[] = this.stimuli.map((stimulus, index) => ({
         name: `${stimulus.message} ${stimulus.keyword ? "(🔤)" : ""} ${stimulus.stickers ? "(🪧)" : ""}`,
-        value: stimulus.reactions.map(reaction => reaction.message).join("\n"),
+        value: stimulus.reactions.map(reaction => `• ${reaction.message}`).join("\n"),
         inline: index % 3 !== 2,
       }));
       const embed = new EmbedBuilder().setTitle("Stimuli List");
@@ -190,32 +192,60 @@ export class MessageReactionService {
 
   @UseInterceptors(MessageReactionInterceptor)
   @SlashCommand({
-    name: "toggle-keyword",
-    description: "Toggle a stimulus as a keyword",
+    name: "update-stimulus",
+    description: "Update a stimulus",
     defaultMemberPermissions: ["ManageGuild"],
   })
-  public async toggleKeyword(@Context() [interaction]: SlashCommandContext, @Options() options: ToggleKeywordCommandDto) {
+  public async updateStimulus(@Context() [interaction]: SlashCommandContext, @Options() options: UpdateStimulusCommandDto) {
     const stimulus = this.stimuli.find(s => s.message === options.message);
     if (!stimulus) {
       await throwError("Stimulus not found", interaction);
       return;
     }
 
-    const keywordStr = stimulus.keyword ? "not keyword" : "keyword";
-
     try {
       const updatedStimulus = await this.dbService.messageReaction_Stimulus.update({
         where: {message: stimulus.message},
-        data: {keyword: !stimulus.keyword},
+        data: {
+          message: options.newMessage ?? undefined,
+          keyword: options.keyword ?? undefined,
+          stickers: options.stickers ?? undefined,
+        },
       });
-      this.logger.debug(`Toggled stimulus as ${keywordStr}: ${updatedStimulus.message}`);
+      this.logger.debug(`Updated stimulus: ${stimulus.message}`);
 
-      stimulus.keyword = updatedStimulus.keyword;
+      // Update the stimulus in the array
+      Object.assign(stimulus, updatedStimulus);
 
-      await interaction.reply(`Stimulus toggled as ${keywordStr}: ${updatedStimulus.message}`);
+      // Generate changes embed
+      const changes = new EmbedBuilder()
+        .setTitle("Stimulus Updated")
+        .setDescription(`Updated stimulus: ${stimulus.message}`)
+        .setColor("Green");
+
+      if (options.newMessage) {
+        changes.addFields({
+          name: "Message",
+          value: `⚠️ Changed from ${stimulus.message} to ${updatedStimulus.message}`,
+        });
+      }
+      if (options.keyword) {
+        changes.addFields({
+          name: "Keyword",
+          value: `${updatedStimulus.keyword ? "✅ Set" : "❌ Unset"}`,
+        });
+      }
+      if (options.stickers) {
+        changes.addFields({
+          name: "Stickers",
+          value: `${updatedStimulus.stickers ? "✅ Enabled" : "❌ Disabled"}`,
+        });
+      }
+
+      await interaction.reply({embeds: [changes]});
     } catch (e) {
-      this.logger.debug(`Failed to toggle stimulus as ${keywordStr}: ${e.message}`);
-      await throwError("Failed to toggle stimulus as ${keywordStr}", interaction);
+      this.logger.debug(`Failed to update stimulus: ${e.message}`);
+      await throwError("Failed to update stimulus", interaction);
     }
   }
 
