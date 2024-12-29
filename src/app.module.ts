@@ -14,6 +14,7 @@ import { MessageReactionModule } from "./message-reaction/message-reaction.modul
       validationSchema: joi.object({
         DISCORD_TOKEN: joi.string().required(),
         DISCORD_DEVELOPMENT_GUILD_ID: joi.string(),
+        BUGS_CHANNEL_ID: joi.string().required(),
       }),
     }),
     PrismaModule,
