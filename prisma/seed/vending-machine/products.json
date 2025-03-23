@@ -1,0 +1,11 @@
+{
+  "$schema": "./products.schema.json",
+  "products": [
+    {
+      "name": "Hamburger"
+    },
+    {
+      "name": "Vegan Salad"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 # Dockerfile
-FROM node:22.11.0-slim AS base
+FROM node:22-slim AS base
 
 RUN apt-get update -y && apt-get install -y openssl
 

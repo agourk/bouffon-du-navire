@@ -124,8 +124,8 @@ export class MessageReactionService {
 
       return interaction.reply({embeds: [embed]});
     } catch (e) {
-      this.logger.debug(`Failed to list stimuli: ${e.message}`);
-      await throwError("Failed to list stimuli", interaction);
+      this.logger.error(`Failed to list stimuli: ${e.message}`);
+      await throwError("An error occurred while listing the stimuli", interaction);
     }
   }
 

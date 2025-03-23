@@ -5,8 +5,8 @@ services:
       db:
         condition: service_healthy
         required: true
-    volumes:
-      - ./docker-entrypoint.sh:/app/docker-entrypoint.sh:ro
+#    volumes:
+#      - ./docker-entrypoint.sh:/app/docker-entrypoint.sh:ro
     environment:
       PORT: "3000"
       LOG_LEVEL: "verbose"

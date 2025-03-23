@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import * as fs from "fs";
 import * as path from "path";
 import { Stimuli } from "./message-reaction/stimuli";
+import { Product } from "./vending-machine/product";
 
 const prisma = new PrismaClient();
 
@@ -20,6 +21,18 @@ async function main() {
         },
       },
       include: {reactions: true},
+    });
+  }
+
+  // vending-machine
+  const products: Product[] = JSON.parse(fs.readFileSync(`${path.dirname(require.main.filename)}/vending-machine/products.json`, "utf-8")).products;
+  for (const product of products) {
+    await prisma.vendingMachine_Product.upsert({
+      where: {name: product.name},
+      update: {},
+      create: {
+        name: product.name,
+      },
     });
   }
 }
