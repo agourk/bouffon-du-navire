@@ -151,14 +151,14 @@ export class VendingMachineAdminService {
   })
   public async addProduct(@Context() [interaction]: SlashCommandContext, @Options() options: AddProductCommandDto) {
     try {
-      await this.prisma.vendingMachine_Product.create({
+      const newProduct = await this.prisma.vendingMachine_Product.create({
         data: {
           name: options.name,
         },
       });
 
       const products = await this.cacheManager.get("vending-machine:products") as VendingMachine_Product[];
-      products.push({name: options.name} as VendingMachine_Product);
+      products.push(newProduct);
       await this.cacheManager.set("vending-machine:products", products);
 
       this.logger.log(`Product added: "${options.name}"`);
