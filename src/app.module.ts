@@ -6,10 +6,10 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import * as joi from "joi";
 import { IntentsBitField } from "discord.js";
 import { MessageReactionModule } from "./message-reaction/message-reaction.module";
-import { VendingMachineModule } from './vending-machine/vending-machine.module';
+import { VendingMachineModule } from "./vending-machine/vending-machine.module";
 import { ScheduleModule } from "@nestjs/schedule";
-import { FunCommandsModule } from './fun-commands/fun-commands.module';
-import { TreeNotificationsModule } from './tree-notifications/tree-notifications.module';
+import { FunCommandsModule } from "./fun-commands/fun-commands.module";
+import { TreeNotificationsModule } from "./tree-notifications/tree-notifications.module";
 import { DiscordLoggerModule } from "./logger/discord-logger.module";
 
 @Module({
@@ -24,8 +24,9 @@ import { DiscordLoggerModule } from "./logger/discord-logger.module";
         DISCORD_DEVELOPMENT_GUILD_ID: joi.string(),
         BUGS_CHANNEL_ID: joi.string().required(),
         PEXELS_API_KEY: joi.string().required(),
+        TREE_NOTIF_MESSAGE_CHANNEL_ID: joi.string().required(),  // Channel where the tree message is located
         TREE_NOTIF_MESSAGE_ID: joi.string().required(),
-        TREE_NOTIF_CHANNEL_ID: joi.string().required(),
+        TREE_NOTIF_CHANNEL_ID: joi.string().required(),  // Channel where tree notification messages are sent
         TREE_NOTIF_ROLE_ID: joi.string().required(),
       }),
     }),

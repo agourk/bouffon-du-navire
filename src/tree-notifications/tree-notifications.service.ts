@@ -26,6 +26,9 @@ import { ConfigService } from "@nestjs/config";
 export class TreeNotificationsService {
   // TODO: Move these IDs to config/env variables
   private readonly MESSAGE_ID: Snowflake;
+  // Channel where the tree message is located
+  private readonly MESSAGE_CHANNEL_ID: Snowflake;
+  // Channel to send notifications to
   private readonly CHANNEL_ID: Snowflake;
   private readonly ROLE_ID: Snowflake;
 
@@ -36,6 +39,7 @@ export class TreeNotificationsService {
               private readonly db: PrismaService, private readonly config: ConfigService) {
     this.logger.setContext(TreeNotificationsService.name);
     this.MESSAGE_ID = this.config.get<string>("TREE_NOTIF_MESSAGE_ID");
+    this.MESSAGE_CHANNEL_ID = this.config.get<string>("TREE_NOTIF_MESSAGE_CHANNEL_ID");
     this.CHANNEL_ID = this.config.get<string>("TREE_NOTIF_CHANNEL_ID");
     this.ROLE_ID = this.config.get<string>("TREE_NOTIF_ROLE_ID");
   }
@@ -51,7 +55,7 @@ export class TreeNotificationsService {
   public async onReady(@Context() [client]: ContextOf<"clientReady">) {
     this.logger.debug("TreeNotifications loaded");
 
-    const channel = (await client.channels.fetch(this.CHANNEL_ID)) as TextChannel;
+    const channel = (await client.channels.fetch(this.MESSAGE_CHANNEL_ID)) as TextChannel;
 
     if (!channel) {
       this.logger.error("Channel not found");
@@ -356,7 +360,7 @@ export class TreeNotificationsService {
       },
     });
 
-    const channel = (client.channels.cache.get(this.CHANNEL_ID)) as TextChannel;
+    const channel = (client.channels.cache.get(this.MESSAGE_CHANNEL_ID)) as TextChannel;
     const guild = channel.guild;
     const role = guild.roles.cache.get(this.ROLE_ID);
 
