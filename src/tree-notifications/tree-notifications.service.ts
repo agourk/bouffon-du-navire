@@ -123,7 +123,7 @@ export class TreeNotificationsService {
         treeNotifications_Preferences: true,
       },
     });
-    if (user) {
+    if (user && user.treeNotifications_Preferences) {
       this.logger.debug(`Fetched user ${interaction.user.id} preferences: ${JSON.stringify(user.treeNotifications_Preferences)}`);
     } else {
       this.logger.debug(`No preferences found for user ${interaction.user.id}`);
@@ -150,13 +150,13 @@ export class TreeNotificationsService {
                 label: "Activé",
                 description: "Recevoir les notifications quand l'arbre est prêt à être arrosé",
                 value: "true",
-                default: user?.treeNotifications_Preferences.enabled ?? false,
+                default: user?.treeNotifications_Preferences?.enabled ?? false,
               },
               {
                 label: "Désactivé",
                 description: "Ne pas recevoir de notifications",
                 value: "false",
-                default: !(user?.treeNotifications_Preferences.enabled ?? false),
+                default: !(user?.treeNotifications_Preferences?.enabled ?? false),
               },
             ],
           })),
@@ -169,7 +169,7 @@ export class TreeNotificationsService {
             required: true,
             minLength: 5,
             maxLength: 5,
-            value: user?.treeNotifications_Preferences.startTime ?? undefined,
+            value: user?.treeNotifications_Preferences?.startTime ?? undefined,
           })),
           new LabelBuilder({
             label: "Heure de fin (HH:MM, 24h)",
@@ -180,7 +180,7 @@ export class TreeNotificationsService {
             required: true,
             minLength: 5,
             maxLength: 5,
-            value: user?.treeNotifications_Preferences.endTime ?? undefined,
+            value: user?.treeNotifications_Preferences?.endTime ?? undefined,
           })),
         ]),
     );
