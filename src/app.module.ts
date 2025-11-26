@@ -15,6 +15,7 @@ import { DiscordLoggerModule } from "./logger/discord-logger.module";
 @Module({
   imports: [
     DiscordLoggerModule,
+    // TODO: Create interface for env variables
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: joi.object({
@@ -23,6 +24,9 @@ import { DiscordLoggerModule } from "./logger/discord-logger.module";
         DISCORD_DEVELOPMENT_GUILD_ID: joi.string(),
         BUGS_CHANNEL_ID: joi.string().required(),
         PEXELS_API_KEY: joi.string().required(),
+        TREE_NOTIF_MESSAGE_ID: joi.string().required(),
+        TREE_NOTIF_CHANNEL_ID: joi.string().required(),
+        TREE_NOTIF_ROLE_ID: joi.string().required(),
       }),
     }),
     ScheduleModule.forRoot(),

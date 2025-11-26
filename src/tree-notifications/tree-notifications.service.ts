@@ -16,6 +16,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { parseTimeInMinutes } from "../utils/datetime";
 import { DiscordLoggerService } from "../logger/discord-logger.service";
 import { throwError } from "../utils/interactions.utils";
+import { ConfigService } from "@nestjs/config";
 
 /**
  * Service to handle tree watering notifications.
@@ -24,16 +25,19 @@ import { throwError } from "../utils/interactions.utils";
 @Injectable()
 export class TreeNotificationsService {
   // TODO: Move these IDs to config/env variables
-  private readonly MESSAGE_ID: Snowflake = "1442870371106820186";
-  private readonly CHANNEL_ID: Snowflake = "1442870041426133154";
-  private readonly ROLE_ID: Snowflake = "1442870502522753075";
+  private readonly MESSAGE_ID: Snowflake;
+  private readonly CHANNEL_ID: Snowflake;
+  private readonly ROLE_ID: Snowflake;
 
   private lastWateringUserId: string | null = null;
   private nextWateringDate: Date | null = null;
 
   constructor(private readonly logger: DiscordLoggerService, private readonly scheduler: SchedulerRegistry,
-              private readonly db: PrismaService) {
+              private readonly db: PrismaService, private readonly config: ConfigService) {
     this.logger.setContext(TreeNotificationsService.name);
+    this.MESSAGE_ID = this.config.get<string>("TREE_NOTIF_MESSAGE_ID");
+    this.CHANNEL_ID = this.config.get<string>("TREE_NOTIF_CHANNEL_ID");
+    this.ROLE_ID = this.config.get<string>("TREE_NOTIF_ROLE_ID");
   }
 
   /**
