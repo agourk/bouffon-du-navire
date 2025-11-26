@@ -23,16 +23,29 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+#    services:
+#      postgres:
+#        image: postgres:15
+#        env:
+#          POSTGRES_USER: postgres
+#          POSTGRES_PASSWORD: postgres
+#        options: >-
+#          --health-cmd="pg_isready -U postgres"
+#          --health-interval=10s
+#          --health-timeout=5s
+#          --health-retries=5
     steps:
-      - uses: actions/checkout@v2
-      - name: Run tests
-        run: |
-          if [ -f docker-compose.test.yml ]; then
-            docker-compose --file docker-compose.test.yml build
-            docker-compose --file docker-compose.test.yml run sut
-          else
-            docker build . --file Dockerfile
-          fi
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          push: false
+          tags: bfn-test:latest
+          context: .
+          secrets: "db-url=postgres://postgres:postgres@postgres:5432/postgres"
+
 
   build:
     needs: test
@@ -93,6 +106,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          secrets: "db-url=${{ secrets.DATABASE_URL }}"
 
       # Sign the resulting Docker image digest except on PRs.
       # This will only write to the public Rekor transparency log when the Docker
