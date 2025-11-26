@@ -1,14 +1,16 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../../src/prisma/generated/prisma-client/client";
 import * as fs from "fs";
 import * as path from "path";
-import { Stimuli } from "./message-reaction/stimuli";
+import { Stimulus } from "./message-reaction/stimuli";
 import { Product } from "./vending-machine/product";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg({connectionString: process.env.DATABASE_URL!});
+const prisma = new PrismaClient({adapter});
 
 async function main() {
   // message-reaction
-  const stimuli: Stimuli = JSON.parse(fs.readFileSync(`${path.dirname(require.main.filename)}/message-reaction/stimuli.json`, "utf-8")).stimuli;
+  const stimuli: Stimulus[] = JSON.parse(fs.readFileSync(`${path.dirname(require.main.filename)}/message-reaction/stimuli.json`, "utf-8")).stimuli;
   for (const stimulus of stimuli) {
     await prisma.messageReaction_Stimulus.upsert({
       where: {message: stimulus.message},

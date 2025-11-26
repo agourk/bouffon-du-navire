@@ -102,6 +102,9 @@ fabric.properties
 .idea/**/markdown-navigator-enh.xml
 .idea/**/markdown-navigator/
 
+# Copilot stuff
+.idea/**/copilot*
+
 # Cache file creation bug
 # See https://youtrack.jetbrains.com/issue/JBR-2257
 .idea/$CACHE_FILE$
@@ -191,6 +194,7 @@ web_modules/
 
 # dotenv environment variable files
 .env
+.env.OLD
 .env.development.local
 .env.test.local
 .env.production.local
@@ -274,3 +278,5 @@ dist
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/intellij,visualstudiocode,node
+
+src/prisma/generated

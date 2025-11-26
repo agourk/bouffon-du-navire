@@ -4,6 +4,7 @@ import { Logger, LogLevel } from "@nestjs/common";
 import { AllExceptionsFilter } from "./filters/all-exceptions.filter";
 import { Client } from "discord.js";
 import { ConfigService } from "@nestjs/config";
+import { DiscordLoggerService } from "./logger/discord-logger.service";
 
 const logger = new Logger("Main");
 
@@ -17,6 +18,7 @@ async function bootstrap() {
   const client = app.get(Client);
   const config = app.get(ConfigService);
   app.useGlobalFilters(new AllExceptionsFilter(client, config));
+  app.useLogger(await app.resolve(DiscordLoggerService));
 
   await app.listen(PORT);
 }

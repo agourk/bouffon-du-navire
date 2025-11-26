@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, UseInterceptors } from "@nestjs/common";
 import { Cache, CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Context, createCommandGroupDecorator, On, Options, SlashCommandContext, Subcommand } from "necord";
 import { PrismaService } from "../prisma/prisma.service";
-import { VendingMachine_Product } from "@prisma/client";
+import { VendingMachine_Product } from "../prisma/generated/prisma-client/client";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { type createClient, PhotosWithTotalResults } from "pexels";
 import { throwError } from "src/utils/interactions.utils";
@@ -11,30 +11,38 @@ import { VendingMachineInterceptor } from "./interceptors/vending-machine.interc
 import { AddProductCommandDto } from "./dto/add-product-command.dto";
 import { BuyProductCommandDto } from "./dto/buy-product-command.dto";
 import { RemoveProductCommandDto } from "./dto/remove-product-command.dto";
+import { DiscordLoggerService } from "../logger/discord-logger.service";
 
 export const VendingMachineCommandDecorator = createCommandGroupDecorator({
   name: "vending-machine",
   description: "Vending Machine Commands",
 });
 
+// TODO: Maybe move this into a global "/admin" subgroup idk
+export const VendingMachineAdminCommandDecorator = createCommandGroupDecorator({
+  name: "vending-machine-admin",
+  description: "Vending Machine Admin Commands",
+  defaultMemberPermissions: ["ManageGuild"],
+});
+
 @Injectable()
 @VendingMachineCommandDecorator()
 export class VendingMachineService {
-  private readonly logger = new Logger(VendingMachineService.name);
-
-  constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache, private readonly prisma: PrismaService,
-              private readonly schedulerRegistry: SchedulerRegistry, @Inject("Pexels") private readonly pexels: ReturnType<typeof createClient>) {
+  constructor(private readonly logger: DiscordLoggerService, @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+              private readonly db: PrismaService, private readonly schedulerRegistry: SchedulerRegistry,
+              @Inject("Pexels") private readonly pexels: ReturnType<typeof createClient>) {
+    this.logger.setContext(VendingMachineService.name);
   }
 
-  @On("ready")
+  @On("clientReady")
   public async onReady() {
-    await this.cacheManager.set("vending-machine:products", await this.prisma.vendingMachine_Product.findMany());
+    await this.cacheManager.set("vending-machine:products", await this.db.vendingMachine_Product.findMany());
   }
 
   @UseInterceptors(VendingMachineInterceptor)
   @Subcommand({
     name: "buy",
-    description: "Buy a product from the vending machine",
+    description: "Acheter un produit dans le distributeur",
   })
   public async buy(@Context() [interaction]: SlashCommandContext, @Options() options: BuyProductCommandDto) {
     try {
@@ -42,16 +50,16 @@ export class VendingMachineService {
       const product = options.product;
 
       if (!products.map((product) => product.name).includes(product)) {
-        return throwError("Product not found!", interaction);
+        return throwError("Produit introuvable !", interaction);
       }
 
       if (await this.cacheManager.get(`vending-machine:timeout:${interaction.user.id}`)) {
-        this.logger.verbose(`User ${interaction.user.id} tried to buy on timeout`);
+        this.logger.debug(`User ${interaction.user.id} tried to buy on timeout`);
         return throwError("Doucement mon gourmand, attend un peu !", interaction);
       }
 
       // Log the purchase
-      await this.prisma.vendingMachine_Buy.create({
+      await this.db.vendingMachine_Buy.create({
         data: {
           product: {
             connect: {
@@ -86,7 +94,7 @@ export class VendingMachineService {
         let photos = await this.pexels.photos.search({query: product, per_page: 80});
         if ("error" in photos && photos.error) {
           this.logger.error(photos.error);
-          await throwError("An error occurred while fetching the pictures!", interaction);
+          await throwError("Une erreur est survenue pendant le téléchargement des photos.", interaction);
         }
         photos = photos as PhotosWithTotalResults;
 
@@ -106,19 +114,19 @@ export class VendingMachineService {
       return interaction.reply({embeds: [embed]});
     } catch (e) {
       this.logger.error(`Failed to buy product: ${e}`);
-      return throwError("An error occurred while buying the product!", interaction);
+      return throwError("Une erreur est survenue lors de l'achat du produit.", interaction);
     }
   }
 
   @Subcommand({
     name: "products",
-    description: "List all products available in the vending machine",
+    description: "Lister tous les produits disponibles dans le distributeur",
   })
   public async listProducts(@Context() [interaction]: SlashCommandContext) {
     try {
       const products = await this.cacheManager.get("vending-machine:products") as VendingMachine_Product[];
       const embed = new EmbedBuilder()
-        .setTitle("Vending Machine Products")
+        .setTitle("Produits disponibles")
         .setColor("Gold")
         .setDescription(products.reduce(
           (acc, product) => acc + `- ${product.name}\n`,
@@ -128,21 +136,17 @@ export class VendingMachineService {
       return interaction.reply({embeds: [embed]});
     } catch (e) {
       this.logger.error(`Failed to fetch products: ${e}`);
-      return throwError("An error occurred while listing the products!", interaction);
+      return throwError("Une erreur est survenue pendant le listing des produits.", interaction);
     }
   }
 }
 
 @Injectable()
-@VendingMachineCommandDecorator({
-  name: "admin",
-  description: "Vending Machine Admin Commands",
-  defaultMemberPermissions: ["ManageGuild"],
-})
+@VendingMachineAdminCommandDecorator()
 export class VendingMachineAdminService {
   private readonly logger = new Logger(VendingMachineAdminService.name);
 
-  constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache, private readonly prisma: PrismaService) {
+  constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache, private readonly db: PrismaService) {
   }
 
   @Subcommand({
@@ -151,7 +155,7 @@ export class VendingMachineAdminService {
   })
   public async addProduct(@Context() [interaction]: SlashCommandContext, @Options() options: AddProductCommandDto) {
     try {
-      const newProduct = await this.prisma.vendingMachine_Product.create({
+      const newProduct = await this.db.vendingMachine_Product.create({
         data: {
           name: options.name,
         },
@@ -182,7 +186,7 @@ export class VendingMachineAdminService {
         return throwError("Product not found!", interaction);
       }
 
-      await this.prisma.vendingMachine_Product.delete({where: {id: product.id}});
+      await this.db.vendingMachine_Product.delete({where: {id: product.id}});
 
       const products = await this.cacheManager.get("vending-machine:products") as VendingMachine_Product[];
       await this.cacheManager.set("vending-machine:products", products.filter((p) => p.name !== options.name));

@@ -1,7 +1,7 @@
-import { Injectable, Logger, UseInterceptors } from "@nestjs/common";
+import { Injectable, UseInterceptors } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { Context, ContextOf, On, Once, Options, SlashCommand, SlashCommandContext } from "necord";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../prisma/generated/prisma-client/client";
 import { AddStimulusCommandDto } from "./dto/add-stimulus.command.dto";
 import { MessageReaction_StimulusWithReactions } from "./types/stimulus.type";
 import { throwError } from "../utils/interactions.utils";
@@ -13,18 +13,27 @@ import { UpdateStimulusCommandDto } from "./dto/update-stimulus.command.dto";
 import { arrayChoose } from "../utils/array.utils";
 import { RemoveReactionCommandDto } from "./dto/remove-reaction.command.dto";
 import { PlaceholdersLib } from "./libs/placeholders.lib";
+import { DiscordLoggerService } from "../logger/discord-logger.service";
 
+// TODO: Refactor, use interactions everywhere
+// TODO: Fix case sensitivity issues
+// TODO: Add pagination to list-stimuli command
+// TODO: Add server-specific stimuli
+// TODO: Fix bug where 2 stimuli with same prefix cause only first to trigger
+/**
+ * Service that reacts to messages based on predefined stimuli.
+ */
 @Injectable()
 export class MessageReactionService {
-  public stimuli: Array<MessageReaction_StimulusWithReactions>;
-  private readonly logger = new Logger(MessageReactionService.name);
+  private stimuli: Array<MessageReaction_StimulusWithReactions>;
 
-  constructor(private readonly dbService: PrismaService) {
+  constructor(private readonly logger: DiscordLoggerService, private readonly db: PrismaService) {
+    this.logger.setContext(MessageReactionService.name);
   }
 
-  @Once("ready")
+  @Once("clientReady")
   public async onReady() {
-    this.stimuli = await this.dbService.messageReaction_Stimulus.findMany({include: {reactions: true}});
+    this.stimuli = await this.db.messageReaction_Stimulus.findMany({include: {reactions: true}});
 
     this.logger.debug(`Stimuli loaded: [${this.stimuli.map(s => s.message).join(", ")}]`);
   }
@@ -55,7 +64,7 @@ export class MessageReactionService {
         if (stimulus.stickers && stickers.size > 0) {
           return stickers.some(sticker => sticker.name == stimulus.message);
         }
-        return content === stimulus.message
+        return content === stimulus.message;
         // || content.replace(/\W+/g, "") === stimulus.message;
       }
     });
@@ -78,7 +87,7 @@ export class MessageReactionService {
   })
   public async addStimulus(@Context() [interaction]: SlashCommandContext, @Options() options: AddStimulusCommandDto) {
     try {
-      const stimulus: MessageReaction_StimulusWithReactions | null = await this.dbService.messageReaction_Stimulus.create({
+      const stimulus: MessageReaction_StimulusWithReactions | null = await this.db.messageReaction_Stimulus.create({
         data: {
           message: options.message,
           keyword: options.keyword ?? undefined,  // We have to use undefined if null so that the default value is used
@@ -143,7 +152,7 @@ export class MessageReactionService {
     }
 
     try {
-      const reaction = await this.dbService.messageReaction_Response.create({
+      const reaction = await this.db.messageReaction_Response.create({
         data: {
           message: options.reactions,
           stimulus: {connect: {message: stimulus.message}},
@@ -182,7 +191,7 @@ export class MessageReactionService {
     }
 
     try {
-      await this.dbService.messageReaction_Response.delete({where: {id: reaction.id}});
+      await this.db.messageReaction_Response.delete({where: {id: reaction.id}});
       this.logger.debug(`Removed reaction: ${reaction.message} from stimulus: ${stimulus.message}`);
 
       stimulus.reactions = stimulus.reactions.filter(r => r.id !== reaction.id);
@@ -208,7 +217,7 @@ export class MessageReactionService {
     }
 
     try {
-      const updatedStimulus = await this.dbService.messageReaction_Stimulus.update({
+      const updatedStimulus = await this.db.messageReaction_Stimulus.update({
         where: {message: stimulus.message},
         data: {
           message: options.newMessage ?? undefined,
@@ -261,7 +270,7 @@ export class MessageReactionService {
   })
   public async removeStimulus(@Context() [interaction]: SlashCommandContext, @Options() options: RemoveStimulusCommandDto) {
     try {
-      const stimulus = await this.dbService.messageReaction_Stimulus.delete({
+      const stimulus = await this.db.messageReaction_Stimulus.delete({
         where: {message: options.message},
         include: {reactions: true},
       });

@@ -9,12 +9,16 @@ import { MessageReactionModule } from "./message-reaction/message-reaction.modul
 import { VendingMachineModule } from './vending-machine/vending-machine.module';
 import { ScheduleModule } from "@nestjs/schedule";
 import { FunCommandsModule } from './fun-commands/fun-commands.module';
+import { TreeNotificationsModule } from './tree-notifications/tree-notifications.module';
+import { DiscordLoggerModule } from "./logger/discord-logger.module";
 
 @Module({
   imports: [
+    DiscordLoggerModule,
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: joi.object({
+        DATABASE_URL: joi.string().required(),
         DISCORD_TOKEN: joi.string().required(),
         DISCORD_DEVELOPMENT_GUILD_ID: joi.string(),
         BUGS_CHANNEL_ID: joi.string().required(),
@@ -38,7 +42,8 @@ import { FunCommandsModule } from './fun-commands/fun-commands.module';
     }),
     MessageReactionModule,
     VendingMachineModule,
-    FunCommandsModule],
+    FunCommandsModule,
+    TreeNotificationsModule],
   providers: [AppService],
 })
 export class AppModule {

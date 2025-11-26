@@ -2,59 +2,78 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider     = "prisma-client"
+  output       = "../src/prisma/generated/prisma-client"
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
-  id        String   @id @default(cuid())
+  id        String @id @default(cuid())
+  discordId String @unique
+
+  vendingMachine_Buy            VendingMachine_Buy[]
+  treeNotifications_Preferences TreeNotifications_Preferences?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  discordId String   @unique
-
-  vendingMachine_Buy VendingMachine_Buy[]
 }
 
 // Message Reactions
 model MessageReaction_Stimulus {
   id        String                     @id @default(cuid())
-  createdAt DateTime                   @default(now())
-  updatedAt DateTime                   @updatedAt
   message   String                     @unique
   keyword   Boolean                    @default(true)
   stickers  Boolean                    @default(true)
   reactions MessageReaction_Response[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model MessageReaction_Response {
   id         String                   @id @default(cuid())
-  createdAt  DateTime                 @default(now())
-  updatedAt  DateTime                 @updatedAt
   message    String
   stimulus   MessageReaction_Stimulus @relation(fields: [stimulusId], references: [id], onDelete: Cascade)
   stimulusId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Vending Machine
 model VendingMachine_Product {
-  id        String   @id @default(cuid())
+  id                 String               @id @default(cuid())
+  name               String               @unique
+  vendingMachine_Buy VendingMachine_Buy[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  name      String   @unique
-
-  vendingMachine_Buy VendingMachine_Buy[]
 }
 
 model VendingMachine_Buy {
   id        String                 @id @default(cuid())
-  createdAt DateTime               @default(now())
-  updatedAt DateTime               @updatedAt
   user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   product   VendingMachine_Product @relation(fields: [productId], references: [id])
   productId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Tree Notifications
+model TreeNotifications_Preferences {
+  id        String  @id @default(cuid())
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String  @unique
+  enabled   Boolean @default(false)
+  startTime String  @default("00:00")
+  endTime   String  @default("23:59")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

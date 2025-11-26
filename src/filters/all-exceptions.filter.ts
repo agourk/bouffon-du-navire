@@ -27,6 +27,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     ]);
 
     if (host instanceof NecordExecutionContext) {
+      //@ts-ignore
       const channelId: string | undefined = host.getArgs().at(0).at(0)?.channelId;
       const channel: Channel | undefined = this.client.channels.cache.get(channelId);
 
@@ -39,6 +40,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     // Send the message to the dev server
-    await (this.client.channels.cache.get(this.config.get("BUGS_CHANNEL_ID")) as TextChannel).send({embeds: [embed]});
+    try {
+      await (this.client.channels.cache.get(this.config.get("BUGS_CHANNEL_ID")) as TextChannel).send({embeds: [embed]});
+    } catch (e) {
+      this.logger.error("Failed to send error message to Discord channel", e);
+    }
   }
 }
