@@ -193,13 +193,14 @@ export class TreeNotificationsService {
     const enabled = interaction.fields.getStringSelectValues("enabled")[0] === "true";
     const startTime = interaction.fields.getTextInputValue("start-time");
     const endTime = interaction.fields.getTextInputValue("end-time");
-    this.logger.debug(`User ${interaction.user.id} set tree notifications: enabled=${enabled}, startTime=${startTime}, endTime=${endTime}`);
 
     // Validate time format HH:MM
     if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime) || parseTimeInMinutes(startTime) === null || parseTimeInMinutes(endTime) === null) {
       await throwError("Format d'heure invalide ! Veuillez rentrer une heure en format HH:MM (par ex. 13:45).", interaction);
       return;
     }
+
+    this.logger.debug(`User ${interaction.user.id} set tree notifications: enabled=${enabled}, startTime=${startTime}, endTime=${endTime}`);
 
     try {
       await this.db.user.upsert({
@@ -233,6 +234,17 @@ export class TreeNotificationsService {
           },
         },
       });
+
+      // Remove any existing role if notifications are disabled
+      if (!enabled) {
+        const guild = interaction.guild;
+        const role = guild.roles.cache.get(this.ROLE_ID);
+        const member = await guild.members.fetch(interaction.user.id);
+        if (member.roles.cache.has(role.id)) {
+          await member.roles.remove(role);
+          this.logger.debug(`Removed tree notification role from user ${interaction.user.id} due to disabled notifications`);
+        }
+      }
 
       await interaction.reply({
         content: "Vos préférences de notification ont bien été sauvegardées.",
