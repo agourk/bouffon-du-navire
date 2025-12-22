@@ -344,7 +344,7 @@ export class TreeNotificationsService {
     // Implementation for handling tree watering
     const channel = client.channels.cache.get(this.CHANNEL_ID) as TextChannel;
     try {
-      await channel.send(`L'arbre est prêt à être arrosé ! <@&${this.ROLE_ID}> :arrow_right: <#{this.MESSAGE_CHANNEL_ID}>`);
+      await channel.send(`L'arbre est prêt à être arrosé ! <@&${this.ROLE_ID}> :arrow_right: <#${this.MESSAGE_CHANNEL_ID}>`);
       this.logger.debug("Sent watering notification.");
       this.nextWateringDate = null;
     } catch (e) {
