@@ -3,6 +3,7 @@ import { Context, ContextOf, Modal, ModalContext, On, Once, SlashCommand, SlashC
 import { SchedulerRegistry } from "@nestjs/schedule";
 import {
   Client,
+  EmbedBuilder,
   LabelBuilder,
   MessageFlagsBitField,
   ModalBuilder,
@@ -13,7 +14,7 @@ import {
   TextInputBuilder,
 } from "discord.js";
 import { PrismaService } from "../prisma/prisma.service";
-import { parseTimeInMinutes } from "../utils/datetime";
+import { minutesToHHMM, parseTimeInMinutes } from "../utils/datetime";
 import { DiscordLoggerService } from "../logger/discord-logger.service";
 import { throwError } from "../utils/interactions.utils";
 import { ConfigService } from "@nestjs/config";
@@ -430,6 +431,343 @@ export class TreeNotificationsService {
       } catch (e) {
         this.logger.error(`Failed to remove role from user ${user.discordId}: ${e}`);
       }
+    }
+  }
+
+
+  @SlashCommand({
+    name: "tree-notifications-info",
+    description:
+      "Afficher les statistiques des notifications d'arrosage de l'arbre",
+  })
+  private async treeNotificationsInfoCommand(
+    @Context() [interaction]: SlashCommandContext,
+  ) {
+    this.logger.debug(
+      `Fetching tree notifications info for user ${interaction.user.id}...`,
+    );
+
+    const allPreferences = await this.db.treeNotifications_Preferences.findMany(
+      {
+        include: {
+          user: true,
+        },
+      },
+    );
+    const enabledUsers = allPreferences.filter((pref) => pref.enabled);
+    const coverageCounts = this.calculateCoverageCounts(enabledUsers);
+    const gaps = this.findCoverageGaps(coverageCounts);
+    const embed = this.buildInfoEmbed(
+      allPreferences.length,
+      enabledUsers.length,
+      gaps,
+      coverageCounts,
+    );
+
+    await interaction.reply({
+      embeds: [embed],
+      flags: MessageFlagsBitField.Flags.Ephemeral,
+    });
+  }
+
+  /**
+   * Calculates coverage counts for each minute of the day.
+   * @param enabledUsers List of users with notifications enabled
+   * @returns Array where each index represents coverage count for that minute
+   */
+  private calculateCoverageCounts(
+    enabledUsers: Array<{
+      startTime: string;
+      endTime: string;
+      enabled: boolean;
+    }>,
+  ): number[] {
+    // Create array representing each minute of the day (0-1439)
+    // Each element counts how many users have coverage during that minute
+    const coverageCounts = new Array(24 * 60).fill(0);
+
+    // Accumulate coverage from all enabled users
+    for (const pref of enabledUsers) {
+      this.incrementCoverageForRange(coverageCounts, pref.startTime, pref.endTime);
+    }
+
+    return coverageCounts;
+  }
+
+  /**
+   * Calculates time coverage gaps based on enabled user preferences.
+   * @param enabledUsers List of users with notifications enabled
+   * @returns Array of time gaps with start and end times
+   */
+  private calculateTimeCoverageGaps(
+    enabledUsers: Array<{
+      startTime: string;
+      endTime: string;
+      enabled: boolean;
+    }>,
+  ): Array<{ start: string; end: string }> {
+    const coverageCounts = this.calculateCoverageCounts(enabledUsers);
+    return this.findCoverageGaps(coverageCounts);
+  }
+
+  /**
+   * Increments coverage counts for a given time range.
+   * Modifies the array in place to accumulate coverage from multiple users.
+   * @param coverageCounts Array where each index represents a minute of the day (0-1439)
+   * @param startTime Start time in HH:MM format
+   * @param endTime End time in HH:MM format
+   */
+  private incrementCoverageForRange(
+    coverageCounts: number[],
+    startTime: string,
+    endTime: string,
+  ): void {
+    const start = parseTimeInMinutes(startTime);
+    const end = parseTimeInMinutes(endTime);
+
+    if (start === null || end === null) return;
+
+    if (start <= end) {
+      // Normal case: 09:00 to 18:00
+      for (let i = start; i <= end; i++) {
+        coverageCounts[i]++;
+      }
+    } else {
+      // Overnight case: 22:00 to 02:00
+      for (let i = start; i < 24 * 60; i++) {
+        coverageCounts[i]++;
+      }
+      for (let i = 0; i <= end; i++) {
+        coverageCounts[i]++;
+      }
+    }
+  }
+
+  /**
+   * Finds gaps in time slot coverage.
+   * @param coverageCounts Array representing minutes in a day with coverage counts
+   * @returns Array of gaps with start and end times
+   */
+  private findCoverageGaps(
+    coverageCounts: number[],
+  ): Array<{ start: string; end: string }> {
+    const gaps: Array<{ start: string; end: string }> = [];
+    let gapStart: number | null = null;
+
+    for (let i = 0; i < coverageCounts.length; i++) {
+      if (coverageCounts[i] === 0 && gapStart === null) {
+        gapStart = i;
+      } else if (coverageCounts[i] > 0 && gapStart !== null) {
+        gaps.push(this.formatTimeGap(gapStart, i));
+        gapStart = null;
+      }
+    }
+
+    // Handle gap that wraps around midnight
+    if (gapStart !== null) {
+      gaps.push(this.formatTimeGap(gapStart, 0));
+    }
+
+    return gaps;
+  }
+
+  /**
+   * Formats a time gap into HH:MM strings.
+   * @param startMinute Start minute of the day
+   * @param endMinute End minute of the day
+   * @returns Object with formatted start and end times
+   */
+  private formatTimeGap(
+    startMinute: number,
+    endMinute: number,
+  ): { start: string; end: string } {
+    return {
+      start: minutesToHHMM(startMinute),
+      end: endMinute === 0 ? "00:00" : minutesToHHMM(endMinute),
+    };
+  }
+
+  /**
+   * Finds the least covered time ranges (lowest coverage counts).
+   * @param coverageCounts Array of coverage counts for each minute
+   * @returns Array of time ranges with lowest coverage (up to 3)
+   */
+  private findLeastCoveredRanges(
+    coverageCounts: number[],
+  ): Array<{ start: string; end: string; count: number }> {
+    const minCoverage = Math.min(...coverageCounts.filter(count => count > 0));
+    if (minCoverage === Infinity) return [];
+
+    // Find all ranges with minimum coverage
+    const ranges: Array<{ start: string; end: string; count: number }> = [];
+    let rangeStart: number | null = null;
+
+    for (let i = 0; i < coverageCounts.length; i++) {
+      if (coverageCounts[i] === minCoverage && rangeStart === null) {
+        rangeStart = i;
+      } else if (coverageCounts[i] !== minCoverage && rangeStart !== null) {
+        ranges.push({
+          ...this.formatTimeGap(rangeStart, i),
+          count: minCoverage,
+        });
+        rangeStart = null;
+      }
+    }
+
+    // Handle range that wraps to end of day
+    if (rangeStart !== null) {
+      ranges.push({
+        ...this.formatTimeGap(rangeStart, coverageCounts.length),
+        count: minCoverage,
+      });
+    }
+
+    // Return up to 3 longest ranges
+    return ranges
+      .sort((a, b) => {
+        const durationA = this.calculateRangeDuration(a.start, a.end);
+        const durationB = this.calculateRangeDuration(b.start, b.end);
+        return durationB - durationA;
+      })
+      .slice(0, 3);
+  }
+
+  /**
+   * Calculates duration of a time range in minutes.
+   * @param start Start time in HH:MM format
+   * @param end End time in HH:MM format
+   * @returns Duration in minutes
+   */
+  private calculateRangeDuration(start: string, end: string): number {
+    const startMinutes = parseTimeInMinutes(start) || 0;
+    const endMinutes = parseTimeInMinutes(end) || 0;
+    
+    if (endMinutes >= startMinutes) {
+      return endMinutes - startMinutes;
+    } else {
+      // Overnight range
+      return (24 * 60 - startMinutes) + endMinutes;
+    }
+  }
+
+  /**
+   * Builds the info embed with statistics.
+   * @param totalUsers Total number of users with preferences
+   * @param enabledCount Number of users with notifications enabled
+   * @param gaps Array of coverage gaps
+   * @param coverageCounts Coverage count for each minute of the day
+   * @returns Discord embed with statistics
+   */
+  private buildInfoEmbed(
+    totalUsers: number,
+    enabledCount: number,
+    gaps: Array<{ start: string; end: string }>,
+    coverageCounts: number[],
+  ): EmbedBuilder {
+    const embed = new EmbedBuilder()
+      .setColor("#2ecc71")
+      .setTitle("📊 Statistiques des notifications d'arrosage")
+      .addFields([
+        {
+          name: "👥 Utilisateurs inscrits",
+          value: `${totalUsers} utilisateur(s) ont configuré leurs préférences`,
+          inline: true,
+        },
+        {
+          name: "✅ Notifications activées",
+          value: `${enabledCount} utilisateur(s) recevront des notifications`,
+          inline: true,
+        },
+        {
+          name: "\u200b",
+          value: "\u200b",
+          inline: true,
+        },
+      ]);
+
+    this.addCoverageFields(embed, gaps, enabledCount, coverageCounts);
+    this.addNextWateringField(embed);
+
+    embed.setFooter({
+      text: "Configurez vos préférences avec /tree-notifications",
+    });
+
+    return embed;
+  }
+
+  /**
+   * Adds coverage-related fields to the embed.
+   * @param embed Discord embed builder
+   * @param gaps Array of coverage gaps
+   * @param enabledCount Number of enabled users
+   * @param coverageCounts Coverage count for each minute of the day
+   */
+  private addCoverageFields(
+    embed: EmbedBuilder,
+    gaps: Array<{ start: string; end: string }>,
+    enabledCount: number,
+    coverageCounts: number[],
+  ): void {
+    if (gaps.length > 0) {
+      const gapText = gaps
+        .map((gap) => `• ${gap.start} → ${gap.end}`)
+        .join("\n");
+      embed.addFields([
+        {
+          name: "⚠️ Périodes sans couverture",
+          value: `Personne ne recevra de notifications pendant ces périodes:\n${gapText}`,
+          inline: false,
+        },
+      ]);
+    } else if (enabledCount > 0) {
+      embed.addFields([
+        {
+          name: "✨ Couverture complète",
+          value:
+            "Au moins une personne recevra des notifications à tout moment de la journée !",
+          inline: false,
+        },
+      ]);
+      
+      // Show least covered time ranges when full coverage exists
+      const leastCovered = this.findLeastCoveredRanges(coverageCounts);
+      if (leastCovered.length > 0) {
+        const leastCoveredText = leastCovered
+          .map((range) => `• ${range.start} → ${range.end} (${range.count} personne(s))`)
+          .join("\n");
+        embed.addFields([
+          {
+            name: "📉 Périodes les moins couvertes",
+            value: leastCoveredText,
+            inline: false,
+          },
+        ]);
+      }
+    }
+  }
+
+  /**
+   * Adds next watering information to the embed if available.
+   * @param embed Discord embed builder
+   */
+  private addNextWateringField(embed: EmbedBuilder): void {
+    if (!this.nextWateringDate) return;
+
+    const now = new Date();
+    const timeUntil = Math.floor(
+      (this.nextWateringDate.getTime() - now.getTime()) / 1000,
+    );
+
+    if (timeUntil > 0) {
+      const hours = Math.floor(timeUntil / 3600);
+      const minutes = Math.floor((timeUntil % 3600) / 60);
+      embed.addFields([
+        {
+          name: "🕐 Prochain arrosage",
+          value: `Dans ${hours}h ${minutes}min (<t:${Math.floor(this.nextWateringDate.getTime() / 1000)}:R>)`,
+          inline: false,
+        },
+      ]);
     }
   }
 }
